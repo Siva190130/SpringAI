@@ -31,3 +31,13 @@ build/
 
 ### VS Code ###
 .vscode/
+
+# Local browser artifacts and credentials
+.playwright-mcp/
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
