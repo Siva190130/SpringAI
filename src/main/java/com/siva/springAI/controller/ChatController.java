@@ -6,6 +6,7 @@ import com.siva.springAI.service.ChatService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.CacheControl;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -20,7 +21,10 @@ public class ChatController {
 
     @PostMapping
     public ResponseEntity<ChatResponse> chat(@Valid @RequestBody ChatRequest request) {
-        String reply = chatService.chat(request.message());
-        return ResponseEntity.ok(new ChatResponse(reply));
+        String reply = request.sessionId() == null
+                ? chatService.chat(request.message())
+                : chatService.chat(request.message(), request.sessionId(), request.requestId());
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
+                .body(new ChatResponse(reply));
     }
 }

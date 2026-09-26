@@ -39,6 +39,12 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
                         "AI service is busy. Please retry later."));
     }
 
+    @ExceptionHandler(ChatSessionException.class)
+    public ResponseEntity<ProblemDetail> handleSession(ChatSessionException ex) {
+        return ResponseEntity.status(ex.status())
+                .body(ProblemDetail.forStatusAndDetail(ex.status(), ex.getMessage()));
+    }
+
     @ExceptionHandler({ResourceAccessException.class, OpenAIIoException.class, RateLimitException.class})
     public ResponseEntity<ProblemDetail> handleUnavailable(Exception ex) {
         log.warn("AI provider unavailable ({})", ex.getClass().getSimpleName());

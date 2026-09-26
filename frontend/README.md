@@ -27,10 +27,18 @@ Azure credentials belong only in the Spring backend environment.
 - `src/App.tsx`: responsive layout, suggestions, theme, composer, scrolling.
 - `src/styles.css`: theme tokens, layout, typography, Markdown, reduced motion.
 
-Requests use the existing `POST /api/chat` contract: `{ "message": "..." }`
-returns `{ "reply": "..." }`. Each request is independent: visible earlier
-messages are not sent as model context. Conversations disappear on reload or
-New chat. Only the appearance preference is stored locally.
+The first message creates a session with `POST /api/chat/sessions`. Messages use
+`POST /api/chat` with `{ "message": "...", "sessionId": "...", "requestId": "..." }`
+and receive `{ "reply": "..." }`. The server supplies recent conversation context;
+the browser does not resend or control earlier model messages. Manual retries reuse
+the same request ID so a completed turn can be returned without another model call.
+
+New chat clears the interface and requests deletion of the previous session.
+Sessions and messages are held in memory, not local storage. Reloading starts fresh;
+server sessions expire after 30 idle minutes or a backend restart. Expired sessions
+offer an explicit New chat action. Memory retains up to 10 completed turns within
+a 64,000-character budget, so older visible messages can fall outside model context.
+Only the appearance preference is stored locally.
 
 Enter sends; Shift+Enter inserts a newline. Composition input is respected.
 Replies arrive in full because the backend does not stream. Stop cancels browser
@@ -63,6 +71,7 @@ key server-side at the gateway; never put it in frontend source, a `VITE_*`
 variable, local storage, or a publicly accessible configuration file. A gateway
 that injects the key must itself restrict access (for example to a private
 network or authenticated users); otherwise it exposes the paid API publicly.
-User authentication, shared sessions, saved history, and production gateway
-configuration are outside this first frontend version. Configure gateway timeouts
+User authentication, sessions shared across backend instances, saved history, and production gateway
+configuration remain future work. Session IDs act as temporary bearer capabilities;
+keep them private and avoid logging request bodies or session URLs. Configure gateway timeouts
 to allow the provider response and security headers appropriate to your hosting.

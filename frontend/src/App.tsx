@@ -95,7 +95,7 @@ export default function App() {
 
   function submit(event?: FormEvent) {
     event?.preventDefault();
-    if (!draft.trim() || draft.length > MAX_MESSAGE_LENGTH || pending) return;
+    if (!draft.trim() || draft.length > MAX_MESSAGE_LENGTH || pending || failure?.expired) return;
     follow.current = true;
     void send(draft);
     setDraft('');
@@ -153,9 +153,9 @@ export default function App() {
         <div className="sidebar-bottom">
           <span className="version-tag">EARLY EDITION</span>
           <p>
-            Fresh conversations, every time.
+            Follow-up questions welcome.
             <br />
-            Your chats aren’t saved yet.
+            Temporary memory. No saved history.
           </p>
           <button className="theme-button" onClick={() => setDark(!dark)}>
             {dark ? <Sun size={17} /> : <Moon size={17} />}
@@ -244,8 +244,10 @@ export default function App() {
               {failure && (
                 <div className="error-card" role="alert">
                   <p>{failure.message}</p>
-                  <button onClick={() => void send(failure.prompt, true)}>
-                    <RotateCcw size={14} /> Try again
+                  <button
+                    onClick={() => (failure.expired ? newChat() : void send(failure.prompt, true))}
+                  >
+                    <RotateCcw size={14} /> {failure.expired ? 'Start a new chat' : 'Try again'}
                   </button>
                 </div>
               )}
@@ -296,7 +298,9 @@ export default function App() {
                   <button
                     className="send-button"
                     type="submit"
-                    disabled={!draft.trim() || draft.length > MAX_MESSAGE_LENGTH}
+                    disabled={
+                      !draft.trim() || draft.length > MAX_MESSAGE_LENGTH || failure?.expired
+                    }
                     aria-label="Send message"
                   >
                     <ArrowUp size={20} />
@@ -308,7 +312,7 @@ export default function App() {
           <p id="composer-help" className="composer-help">
             {draft.length > MAX_MESSAGE_LENGTH
               ? 'Please shorten your message to 16,000 characters.'
-              : 'Each message is independent. AI can make mistakes; double-check important details.'}
+              : 'Recent messages provide context. Chats are temporary. Double-check important details.'}
           </p>
         </div>
       </main>
