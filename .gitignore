@@ -41,3 +41,12 @@ build/
 *.key
 *.p12
 *.pfx
+
+# Frontend dependencies and generated output
+frontend/node_modules/
+frontend/.npm-cache/
+frontend/dist/
+frontend/coverage/
+frontend/test-results/
+frontend/playwright-report/
+*.tsbuildinfo

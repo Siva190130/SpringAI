@@ -1,5 +1,8 @@
 # Spring AI chat API
 
+The React + Vite + Tailwind frontend lives in [`frontend/`](frontend/README.md).
+See its README for local setup, architecture, checks, and deployment requirements.
+
 Java 21, Spring Boot 4.1 and Spring AI 2.0. Configure
 AZURE_OPENAI_BASE_URL (your Azure OpenAI v1 URL), AZURE_OPENAI_API_KEY and
 AZURE_OPENAI_DEPLOYMENT, then run:
