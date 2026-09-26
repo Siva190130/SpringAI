@@ -1,39 +1,63 @@
 package com.siva.springAI.exception;
 
+import com.openai.errors.OpenAIException;
+import com.openai.errors.OpenAIIoException;
+import com.openai.errors.RateLimitException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpStatusCode;
+import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.client.ResourceAccessException;
+import org.springframework.web.context.request.WebRequest;
+import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
 
-/*
- * @RestControllerAdvice = @ControllerAdvice + @ResponseBody.
- * Internally, Spring registers this as a bean and DispatcherServlet's
- * exception resolution chain (ExceptionHandlerExceptionResolver) scans
- * all @ExceptionHandler methods across every @RestControllerAdvice bean
- * when a controller method throws. It picks the most specific matching
- * exception type — this is why order of methods below doesn't matter,
- * but specificity of the exception class does.
- */
 @RestControllerAdvice
-public class GlobalExceptionHandler {
+public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
+    private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
-    // Thrown when the underlying HTTP client (used internally by
-    // OllamaApi to call http://localhost:11434) can't connect —
-    // i.e. Ollama daemon isn't running. Catching this specifically
-    // gives callers a meaningful 503 instead of a raw stack trace.
-    @ExceptionHandler(ResourceAccessException.class)
-    public ResponseEntity<String> handleOllamaDown(ResourceAccessException ex) {
-        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
-                .body("AI service unavailable — check Ollama is running on localhost:11434");
+    // Preserve MVC status codes without exposing parser or rejected-value details.
+    @Override
+    protected ResponseEntity<Object> handleExceptionInternal(Exception ex, Object body,
+            HttpHeaders headers, HttpStatusCode status, WebRequest request) {
+        String detail = status.value() == 400
+                ? "Invalid request. Supply valid JSON with a nonblank message of at most 16000 characters."
+                : "The request could not be processed.";
+        return super.handleExceptionInternal(ex, ProblemDetail.forStatusAndDetail(status, detail),
+                headers, status, request);
     }
 
-    // Catch-all fallback. Keep this LAST conceptually (Spring resolves
-    // by specificity regardless of declaration order, but readability
-    // matters for whoever maintains this next).
+    @ExceptionHandler(ChatCapacityException.class)
+    public ResponseEntity<ProblemDetail> handleCapacity(ChatCapacityException ex) {
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .header(HttpHeaders.RETRY_AFTER, "1")
+                .body(ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE,
+                        "AI service is busy. Please retry later."));
+    }
+
+    @ExceptionHandler({ResourceAccessException.class, OpenAIIoException.class, RateLimitException.class})
+    public ResponseEntity<ProblemDetail> handleUnavailable(Exception ex) {
+        log.warn("AI provider unavailable ({})", ex.getClass().getSimpleName());
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE,
+                        "AI service temporarily unavailable. Please retry later."));
+    }
+
+    @ExceptionHandler(OpenAIException.class)
+    public ProblemDetail handleProvider(OpenAIException ex) {
+        log.warn("AI provider request failed ({})", ex.getClass().getSimpleName());
+        return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_GATEWAY,
+                "AI provider could not complete the request.");
+    }
+
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<String> handleGeneric(Exception ex) {
-        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body("Unexpected error: " + ex.getMessage());
+    public ProblemDetail handleGeneric(Exception ex) {
+        log.error("Unexpected request failure", ex);
+        return ProblemDetail.forStatusAndDetail(HttpStatus.INTERNAL_SERVER_ERROR,
+                "An unexpected error occurred.");
     }
 }
