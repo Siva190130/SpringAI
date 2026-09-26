@@ -22,7 +22,8 @@ Azure credentials belong only in the Spring backend environment.
 ## Structure and behavior
 
 - `src/lib/chat-api.ts`: API contract, response validation, timeout, safe errors.
-- `src/hooks/use-chat.ts`: in-memory messages, request lifecycle, cancellation, retry.
+- `src/hooks/use-chat.ts`: history loading, refresh recovery, request lifecycle, cancellation, retry.
+- `src/components/HistorySidebar.tsx`: saved conversations, rename, confirmed permanent deletion.
 - `src/components/Message.tsx`: Markdown presentation and response copying.
 - `src/App.tsx`: responsive layout, suggestions, theme, composer, scrolling.
 - `src/styles.css`: theme tokens, layout, typography, Markdown, reduced motion.
@@ -33,12 +34,16 @@ and receive `{ "reply": "..." }`. The server supplies recent conversation contex
 the browser does not resend or control earlier model messages. Manual retries reuse
 the same request ID so a completed turn can be returned without another model call.
 
-New chat clears the interface and requests deletion of the previous session.
-Sessions and messages are held in memory, not local storage. Reloading starts fresh;
-server sessions expire after 30 idle minutes or a backend restart. Expired sessions
-offer an explicit New chat action. Memory retains up to 10 completed turns within
-a 64,000-character budget, so older visible messages can fall outside model context.
-Only the appearance preference is stored locally.
+New chat clears the interface without deleting saved conversations. The sidebar loads
+history from MySQL, supports pagination, reopening, renaming, and explicit permanent
+deletion with confirmation. Failed deletion keeps the conversation visible. Messages
+are loaded in pages with an option to load earlier turns. The current ID is kept in
+`sessionStorage` so refreshing the tab restores it; message bodies are not stored in
+browser storage. The theme preference uses `localStorage`.
+
+The backend saves full completed turns, but only the latest 10 turns within a
+64,000-character budget provide model context. Chats survive backend restarts and do
+not expire. If a conversation was deleted elsewhere, the UI offers a new chat.
 
 Enter sends; Shift+Enter inserts a newline. Composition input is respected.
 Replies arrive in full because the backend does not stream. Stop cancels browser
@@ -71,7 +76,7 @@ key server-side at the gateway; never put it in frontend source, a `VITE_*`
 variable, local storage, or a publicly accessible configuration file. A gateway
 that injects the key must itself restrict access (for example to a private
 network or authenticated users); otherwise it exposes the paid API publicly.
-User authentication, sessions shared across backend instances, saved history, and production gateway
-configuration remain future work. Session IDs act as temporary bearer capabilities;
-keep them private and avoid logging request bodies or session URLs. Configure gateway timeouts
+This is a personal workspace with one shared history. User authentication and ownership
+remain future work; do not expose the shared history publicly without access protection.
+Keep identifiers private and avoid logging request bodies or session URLs. Configure gateway timeouts
 to allow the provider response and security headers appropriate to your hosting.

@@ -12,7 +12,6 @@ import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.prompt.Prompt;
 import com.siva.springAI.service.ConversationMemory;
-import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
 
@@ -25,7 +24,7 @@ class ChatServiceTests {
         ChatModel model = mock(ChatModel.class);
         when(model.getOptions()).thenReturn(org.springframework.ai.chat.prompt.ChatOptions.builder().build());
         when(model.call(any(Prompt.class))).thenReturn(new ChatResponse(List.of(new Generation(new AssistantMessage("Hello Siva")))));
-        var memory = new ConversationMemory(2, 10, 64000, Duration.ofMinutes(30));
+        var memory = new TestDatabase().memory(10, 64000);
         var service = new ChatService(ChatClient.builder(model).defaultSystem("Be helpful").build(), memory, 2);
         UUID session = memory.create();
         service.chat("My name is Siva", session, UUID.randomUUID());

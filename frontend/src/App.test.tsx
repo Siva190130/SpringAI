@@ -3,12 +3,17 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import App from './App';
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  sessionStorage.clear();
+});
 
 const sessionId = '11111111-1111-4111-8111-111111111111';
 
 function mockApi(reply: (init: RequestInit) => Promise<Response>) {
   const fetch = vi.fn((path: string, init: RequestInit) => {
+    if (path.startsWith('/api/chat/sessions?'))
+      return Promise.resolve(Response.json({ items: [], hasMore: false }));
     if (path === '/api/chat/sessions') return Promise.resolve(Response.json({ sessionId }));
     if (init.method === 'DELETE') return Promise.resolve(new Response(null, { status: 204 }));
     return reply(init);
@@ -69,7 +74,7 @@ describe('chat experience', () => {
     resolve(new Response('{"reply":"Stale reply"}'));
     await waitFor(() => expect(screen.getByText('What’s on your mind?')).toBeInTheDocument());
     expect(screen.queryByText('Stale reply')).not.toBeInTheDocument();
-    expect(fetch).toHaveBeenCalledWith(
+    expect(fetch).not.toHaveBeenCalledWith(
       '/api/chat/sessions/' + sessionId,
       expect.objectContaining({ method: 'DELETE' }),
     );

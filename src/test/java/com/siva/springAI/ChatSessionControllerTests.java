@@ -31,6 +31,28 @@ class ChatSessionControllerTests {
     @MockitoBean ConversationMemory memory;
 
     @Test
+    void listsLoadsAndRenamesSavedConversations() throws Exception {
+        UUID id = UUID.randomUUID();
+        var conversation = new ConversationMemory.Conversation(id.toString(), "Java notes", "2026-01-01T00:00:00Z", "2026-01-01T00:00:00Z");
+        when(memory.list(0)).thenReturn(new ConversationMemory.ConversationPage(java.util.List.of(conversation), false));
+        when(memory.history(id, null)).thenReturn(new ConversationMemory.TurnPage(conversation, java.util.List.of(), false, null));
+        when(memory.rename(id, "Java notes")).thenReturn(conversation);
+        mvc.perform(get("/api/chat/sessions").header("X-API-Key", "test-access-key"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.items[0].title").value("Java notes"));
+        mvc.perform(get("/api/chat/sessions/" + id).header("X-API-Key", "test-access-key"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.conversation.sessionId").value(id.toString()))
+                .andExpect(header().string("Cache-Control", "no-store"));
+        mvc.perform(patch("/api/chat/sessions/" + id).header("X-API-Key", "test-access-key")
+                .contentType(MediaType.APPLICATION_JSON).content("{\"title\":\"Java notes\"}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.title").value("Java notes"));
+        mvc.perform(patch("/api/chat/sessions/" + id).header("X-API-Key", "test-access-key")
+                .contentType(MediaType.APPLICATION_JSON).content("{\"title\":\"   \"}"))
+                .andExpect(status().isBadRequest());
+        mvc.perform(get("/api/chat/sessions")).andExpect(status().isUnauthorized());
+        mvc.perform(get("/api/chat/sessions/" + id)).andExpect(status().isUnauthorized());
+    }
+
+    @Test
     void createsUsesAndDeletesSession() throws Exception {
         UUID session = UUID.randomUUID();
         UUID request = UUID.randomUUID();

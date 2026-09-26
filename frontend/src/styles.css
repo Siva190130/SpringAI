@@ -1,5 +1,141 @@
 @import 'tailwindcss';
 
+.history-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 26px 8px 10px;
+  color: var(--muted);
+  font-size: 9px;
+  letter-spacing: 1.4px;
+}
+.history-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  margin-bottom: 20px;
+}
+.history-empty,
+.history-error {
+  font-size: 12px;
+  line-height: 1.7;
+  padding: 12px 8px;
+  color: var(--muted);
+}
+.history-error {
+  color: #b94a36;
+}
+.history-row {
+  display: flex;
+  align-items: center;
+  border-radius: 8px;
+  padding: 3px;
+  margin: 3px 0;
+}
+.history-row:hover,
+.history-row.selected {
+  background: var(--soft);
+}
+.history-open {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 5px;
+  text-align: left;
+  font-size: 12px;
+}
+.history-open svg {
+  flex-shrink: 0;
+}
+.history-open span {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.history-action {
+  padding: 7px 4px;
+  color: var(--muted);
+  border-radius: 5px;
+}
+.history-action:hover {
+  color: var(--ink);
+  background: var(--surface);
+}
+.load-more {
+  display: block;
+  margin: 12px auto;
+  padding: 7px 10px;
+  font-size: 12px;
+  color: var(--accent);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+}
+.history-dialog {
+  margin: auto;
+  width: min(440px, calc(100vw - 32px));
+  border: 1px solid var(--line);
+  border-radius: 15px;
+  padding: 25px;
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: 0 20px 80px #0003;
+}
+.history-dialog::backdrop {
+  background: #0007;
+}
+.history-dialog h2 {
+  font-size: 20px;
+  font-weight: 600;
+  margin-bottom: 16px;
+}
+.history-dialog p {
+  font-size: 14px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+.history-dialog label {
+  display: block;
+  font-size: 12px;
+  margin-bottom: 7px;
+  color: var(--muted);
+}
+.history-dialog input {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 10px;
+  background: var(--page);
+}
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 25px;
+  font-size: 13px;
+}
+.dialog-actions button {
+  padding: 9px 13px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+}
+.dialog-actions .danger-button {
+  background: #a9382d;
+  color: white;
+  border-color: #a9382d;
+}
+.dialog-actions .confirm-button {
+  background: var(--accent);
+  color: var(--page);
+}
+.topbar-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 40vw;
+}
+
 :root {
   font-family: 'Segoe UI', Arial, sans-serif;
   color: #283b37;

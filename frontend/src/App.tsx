@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Message } from './components/Message';
+import { HistorySidebar } from './components/HistorySidebar';
 import { useChat } from './hooks/use-chat';
 import { MAX_MESSAGE_LENGTH } from './lib/chat-api';
 
@@ -55,7 +56,27 @@ function initialTheme() {
 }
 
 export default function App() {
-  const { messages, pending, failure, send, stop, reset } = useChat();
+  const {
+    messages,
+    pending,
+    failure,
+    send,
+    stop,
+    reset,
+    history,
+    historyError,
+    historyLoading,
+    hasMoreHistory,
+    refreshHistory,
+    loading,
+    loadError,
+    selectedId,
+    openConversation,
+    removeConversation,
+    rename,
+    earlierCursor,
+    loadEarlier,
+  } = useChat();
   const [draft, setDraft] = useState('');
   const [dark, setDark] = useState(initialTheme);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -95,7 +116,15 @@ export default function App() {
 
   function submit(event?: FormEvent) {
     event?.preventDefault();
-    if (!draft.trim() || draft.length > MAX_MESSAGE_LENGTH || pending || failure?.expired) return;
+    if (
+      !draft.trim() ||
+      draft.length > MAX_MESSAGE_LENGTH ||
+      pending ||
+      failure?.expired ||
+      loading ||
+      loadError
+    )
+      return;
     follow.current = true;
     void send(draft);
     setDraft('');
@@ -131,31 +160,29 @@ export default function App() {
         <button className="new-chat" onClick={newChat}>
           <Plus size={18} /> New chat <span>↗</span>
         </button>
-        <div className="sidebar-section-label">YOUR WORKSPACE</div>
-        <div className="workspace-item">
-          <span className="status-dot" /> Current conversation
-        </div>
-        <div className="sidebar-note">
-          <div className="note-illustration">
-            <Sprout size={30} strokeWidth={1.3} />
-          </div>
-          <h2>
-            Good things start
-            <br />
-            with a question.
-          </h2>
-          <p>
-            A little curiosity. A new possibility.
-            <br />
-            See where a conversation takes you.
-          </p>
-        </div>
+        <HistorySidebar
+          items={history}
+          selectedId={selectedId}
+          loading={historyLoading}
+          error={historyError}
+          hasMore={hasMoreHistory}
+          onRefresh={() => void refreshHistory()}
+          onMore={() => void refreshHistory(history.length)}
+          onOpen={(id) => {
+            setDraft('');
+            setMenuOpen(false);
+            follow.current = true;
+            void openConversation(id);
+          }}
+          onRename={rename}
+          onDelete={removeConversation}
+        />
         <div className="sidebar-bottom">
           <span className="version-tag">EARLY EDITION</span>
           <p>
             Follow-up questions welcome.
             <br />
-            Temporary memory. No saved history.
+            Saved history. Your personal workspace.
           </p>
           <button className="theme-button" onClick={() => setDark(!dark)}>
             {dark ? <Sun size={17} /> : <Moon size={17} />}
@@ -183,7 +210,10 @@ export default function App() {
             >
               <Menu size={20} />
             </button>
-            <span className="topbar-title">Your thinking companion</span>
+            <span className="topbar-title">
+              {history.find((item) => item.sessionId === selectedId)?.title ||
+                'Your thinking companion'}
+            </span>
           </div>
           <span className="model-badge">
             <span className="status-dot" /> Spring AI
@@ -197,7 +227,19 @@ export default function App() {
             if (el) follow.current = el.scrollHeight - el.scrollTop - el.clientHeight < 100;
           }}
         >
-          {messages.length === 0 ? (
+          {loadError ? (
+            <div className="error-card" role="alert">
+              <p>{loadError}</p>
+              <button onClick={() => selectedId && void openConversation(selectedId)}>
+                Retry loading
+              </button>
+              <button onClick={newChat}>Start a new chat</button>
+            </div>
+          ) : loading && messages.length === 0 ? (
+            <p role="status" className="history-empty">
+              Loading conversation…
+            </p>
+          ) : messages.length === 0 ? (
             <section className="welcome">
               <div className="welcome-emblem">
                 <Sprout size={38} strokeWidth={1.4} />
@@ -231,6 +273,18 @@ export default function App() {
             </section>
           ) : (
             <section className="messages" aria-label="Conversation">
+              {earlierCursor && (
+                <button
+                  className="load-more"
+                  disabled={loading || pending}
+                  onClick={() => {
+                    follow.current = false;
+                    void loadEarlier();
+                  }}
+                >
+                  {loading ? 'Loading…' : 'Load earlier messages'}
+                </button>
+              )}
               {messages.map((message) => (
                 <Message key={message.id} message={message} />
               ))}
@@ -299,7 +353,11 @@ export default function App() {
                     className="send-button"
                     type="submit"
                     disabled={
-                      !draft.trim() || draft.length > MAX_MESSAGE_LENGTH || failure?.expired
+                      !draft.trim() ||
+                      draft.length > MAX_MESSAGE_LENGTH ||
+                      failure?.expired ||
+                      loading ||
+                      !!loadError
                     }
                     aria-label="Send message"
                   >
@@ -312,7 +370,7 @@ export default function App() {
           <p id="composer-help" className="composer-help">
             {draft.length > MAX_MESSAGE_LENGTH
               ? 'Please shorten your message to 16,000 characters.'
-              : 'Recent messages provide context. Chats are temporary. Double-check important details.'}
+              : 'Conversations are saved. Recent messages provide context. Double-check important details.'}
           </p>
         </div>
       </main>
