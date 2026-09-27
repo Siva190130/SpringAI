@@ -1,0 +1,70 @@
+name: springai-local
+
+services:
+  frontend:
+    profiles: [frontend]
+    image: springai-frontend:local
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      BACKEND_URL: http://backend:8080
+      CHAT_API_KEY: ${CHAT_API_KEY:-}
+    ports:
+      - "127.0.0.1:5173:8080"
+    depends_on:
+      backend:
+        condition: service_healthy
+    stop_grace_period: 30s
+
+  backend:
+    # Phase 1 can still start MySQL alone. BackendUp explicitly selects this service.
+    profiles: [backend, frontend]
+    image: springai-backend:local
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - path: .env.backend
+        required: false
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      SERVER_ADDRESS: 0.0.0.0
+      SERVER_PORT: "8080"
+      DB_URL: jdbc:mysql://mysql:3306/${DB_NAME:?Run scripts/local.ps1 Init first}?sslMode=DISABLED&allowPublicKeyRetrieval=true&connectionTimeZone=UTC
+      DB_USERNAME: ${DB_USERNAME:?Run scripts/local.ps1 Init first}
+      DB_PASSWORD: ${DB_PASSWORD:?Run scripts/local.ps1 Init first}
+      AZURE_OPENAI_API_KEY: ${AZURE_OPENAI_API_KEY:-}
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    stop_grace_period: 30s
+
+  mysql:
+    # Official MySQL 8.4 LTS; digest prevents a later pull silently changing the image.
+    image: mysql:8.4@sha256:0744ee5ef89ce6ccfa13de3e579fe6b9e27f93dd70da9c06d2c908b1b193fb8d
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${DB_NAME:?Run scripts/local.ps1 Init first}
+      MYSQL_USER: ${DB_USERNAME:?Run scripts/local.ps1 Init first}
+      MYSQL_PASSWORD: ${DB_PASSWORD:?Run scripts/local.ps1 Init first}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Run scripts/local.ps1 Init first}
+    ports:
+      - "127.0.0.1:${DB_PORT:-3307}:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - 'MYSQL_PWD="$${MYSQL_PASSWORD}" mysql --protocol=TCP --host=127.0.0.1 --user="$${MYSQL_USER}" --database="$${MYSQL_DATABASE}" --silent --execute="SELECT 1" >/dev/null'
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+volumes:
+  mysql-data:

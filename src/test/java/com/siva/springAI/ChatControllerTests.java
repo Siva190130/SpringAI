@@ -31,6 +31,49 @@ class ChatControllerTests {
     @MockitoBean ChatService service;
 
     @Test
+    void streamsEscapedDeltasAndAcknowledgesCompletion() throws Exception {
+        when(service.stream(eq("Hello"), isNull(), isNull(), any())).thenAnswer(call -> {
+            java.util.function.Consumer<String> delta = call.getArgument(3);
+            delta.accept("Hi\nthere");
+            return "Hi\nthere";
+        });
+        mvc.perform(post("/api/chat/stream").header("X-API-Key", "test-access-key")
+                .contentType(MediaType.APPLICATION_JSON).content("{\"message\":\"Hello\"}"))
+                .andExpect(status().isOk())
+                .andExpect(content().contentTypeCompatibleWith("application/x-ndjson"))
+                .andExpect(header().string("X-Accel-Buffering", "no"))
+                .andExpect(content().string(org.hamcrest.Matchers.allOf(
+                        org.hamcrest.Matchers.containsString("\"type\":\"delta\""),
+                        org.hamcrest.Matchers.containsString("Hi\\nthere"),
+                        org.hamcrest.Matchers.containsString("\"type\":\"done\""))));
+    }
+
+    @Test
+    void streamErrorsAreSanitizedAndNeverAcknowledgeSuccess() throws Exception {
+        when(service.stream(anyString(), isNull(), isNull(), any())).thenAnswer(call -> {
+            java.util.function.Consumer<String> delta = call.getArgument(3);
+            delta.accept("Partial");
+            throw new IllegalStateException("secret-provider-detail");
+        });
+        mvc.perform(post("/api/chat/stream").header("X-API-Key", "test-access-key")
+                .contentType(MediaType.APPLICATION_JSON).content("{\"message\":\"Hello\"}"))
+                .andExpect(content().string(org.hamcrest.Matchers.allOf(
+                        org.hamcrest.Matchers.containsString("\"type\":\"error\""),
+                        org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("secret-provider-detail")),
+                        org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("\"type\":\"done\"")))));
+    }
+
+    @Test
+    void streamingRequiresAuthorizationAndValidInput() throws Exception {
+        mvc.perform(post("/api/chat/stream").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"message\":\"Hello\"}")).andExpect(status().isUnauthorized());
+        mvc.perform(post("/api/chat/stream").header("X-API-Key", "test-access-key")
+                .contentType(MediaType.APPLICATION_JSON).content("{\"message\":\"\"}"))
+                .andExpect(status().isBadRequest());
+        verifyNoInteractions(service);
+    }
+
+    @Test
     void returnsExistingSuccessContract() throws Exception {
         when(service.chat("Hello")).thenReturn("Hi");
         mvc.perform(post("/api/chat").header("X-API-Key", "test-access-key")

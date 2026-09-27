@@ -1,0 +1,61 @@
+server {
+    listen 8080;
+    server_name _;
+    root /usr/share/nginx/html;
+    index index.html;
+    client_max_body_size 128k;
+    gzip off;
+
+    add_header X-Content-Type-Options nosniff always;
+    add_header Referrer-Policy same-origin always;
+
+    location = /healthz {
+        access_log off;
+        default_type text/plain;
+        return 200 "ok\n";
+    }
+
+    location = /api {
+        return 404;
+    }
+
+    location ^~ /api/ {
+        # Avoid recording conversation IDs in API URLs or upstream errors.
+        access_log off;
+        error_log /dev/stderr error;
+        resolver ${NGINX_RESOLVER} valid=10s ipv6=off;
+        set $backend_origin "${BACKEND_URL}";
+        # Variables defer DNS lookup to requests and preserve the original path/query.
+        proxy_pass $backend_origin$request_uri;
+        proxy_http_version 1.1;
+        proxy_set_header Host "${BACKEND_AUTHORITY}";
+        proxy_set_header Connection "";
+        proxy_set_header X-API-Key "${CHAT_API_KEY}";
+        proxy_set_header Accept-Encoding "";
+
+        # Also supports an HTTPS backend origin for the later Azure deployment.
+        proxy_ssl_server_name on;
+        proxy_ssl_name "${BACKEND_HOST}";
+        proxy_ssl_verify on;
+        proxy_ssl_verify_depth 2;
+        proxy_ssl_trusted_certificate /etc/ssl/certs/ca-certificates.crt;
+
+        proxy_buffering off;
+        proxy_request_buffering off;
+        proxy_cache off;
+        proxy_next_upstream off;
+        proxy_connect_timeout 10s;
+        proxy_read_timeout 120s;
+        proxy_send_timeout 120s;
+        send_timeout 120s;
+    }
+
+    location ~ /\. {
+        return 404;
+    }
+
+    location / {
+        expires -1;
+        try_files $uri $uri/ /index.html;
+    }
+}

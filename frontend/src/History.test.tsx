@@ -2,6 +2,7 @@ import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from './App';
+import { streamResponse } from './test/stream-response';
 
 const firstId = '11111111-1111-4111-8111-111111111111';
 const secondId = '22222222-2222-4222-8222-222222222222';
@@ -42,18 +43,18 @@ describe('saved history', () => {
     sessionStorage.setItem('spring-ai-current-chat', firstId);
     const fetch = vi.fn(async (path: string) => {
       if (path.includes('?offset=')) return Response.json({ items: [first], hasMore: false });
-      if (path === '/api/chat') return Response.json({ reply: 'Your name is Siva' });
+      if (path === '/api/chat/stream') return streamResponse('Your name is Siva');
       return Response.json(page());
     });
     vi.stubGlobal('fetch', fetch);
     render(<App />);
     expect(await screen.findByText('Hello Siva')).toBeInTheDocument();
     const user = userEvent.setup();
-    await user.type(screen.getByRole('textbox', { name: 'Message Spring AI' }), 'What is my name?');
+    await user.type(screen.getByRole('textbox', { name: 'Message SHIVA_SMART_GPT' }), 'What is my name?');
     await user.click(screen.getByLabelText('Send message'));
     expect(await screen.findByText('Your name is Siva')).toBeInTheDocument();
     expect(fetch).toHaveBeenCalledWith(
-      '/api/chat',
+      '/api/chat/stream',
       expect.objectContaining({ body: expect.stringContaining(firstId) }),
     );
     await user.click(screen.getByRole('button', { name: /New chat/ }));

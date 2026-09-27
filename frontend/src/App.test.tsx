@@ -1,7 +1,8 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import App from './App';
+import { streamResponse } from './test/stream-response';
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -23,17 +24,48 @@ function mockApi(reply: (init: RequestInit) => Promise<Response>) {
 }
 
 describe('chat experience', () => {
-  it('sends the API contract and renders Markdown without executing HTML', async () => {
-    const fetch = mockApi(async () =>
-      Response.json({ reply: '**Hello** <script>alert(1)</script>' }),
+  it('shows streaming text, discards it on Stop, and retries without duplicate messages', async () => {
+    let controller!: ReadableStreamDefaultController<Uint8Array>;
+    const body = new ReadableStream<Uint8Array>({
+      start(value) {
+        controller = value;
+      },
+    });
+    const reply = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(body, { headers: { 'Content-Type': 'application/x-ndjson' } }),
+      )
+      .mockResolvedValueOnce(streamResponse('Complete reply'));
+    mockApi(reply);
+    render(<App />);
+    const user = userEvent.setup();
+    await user.type(screen.getByRole('textbox'), 'Hello');
+    await user.click(screen.getByLabelText('Send message'));
+    await act(async () =>
+      controller.enqueue(new TextEncoder().encode('{"type":"delta","text":"Partial reply"}\n')),
     );
+    expect(await screen.findByText('Partial reply')).toBeInTheDocument();
+    await user.click(screen.getByLabelText('Stop waiting for response'));
+    expect(screen.queryByText('Partial reply')).not.toBeInTheDocument();
+    // Resolve the mocked network read; real fetch rejects this read on abort.
+    await act(async () => controller.close());
+    await user.click(screen.getByRole('button', { name: 'Try again' }));
+    expect(await screen.findByText('Complete reply')).toBeInTheDocument();
+    expect(screen.getAllByLabelText('Your message')).toHaveLength(1);
+    expect(screen.getAllByLabelText('SHIVA_SMART_GPT response')).toHaveLength(1);
+    expect(reply.mock.calls[0][0].body).toBe(reply.mock.calls[1][0].body);
+  });
+
+  it('sends the API contract and renders Markdown without executing HTML', async () => {
+    const fetch = mockApi(async () => streamResponse('**Hello** <script>alert(1)</script>'));
     render(<App />);
     const user = userEvent.setup();
     await user.type(screen.getByRole('textbox'), 'Hello model');
     await user.click(screen.getByRole('button', { name: 'Send message' }));
     expect(await screen.findByText('Hello', { selector: 'strong' })).toBeInTheDocument();
     expect(fetch).toHaveBeenCalledWith(
-      '/api/chat',
+      '/api/chat/stream',
       expect.objectContaining({
         method: 'POST',
         body: expect.stringContaining('"sessionId":"' + sessionId + '"'),
@@ -46,7 +78,7 @@ describe('chat experience', () => {
     const reply = vi
       .fn()
       .mockResolvedValueOnce(new Response('', { status: 503 }))
-      .mockResolvedValueOnce(new Response('{"reply":"Recovered"}'));
+      .mockResolvedValueOnce(streamResponse('Recovered'));
     mockApi(reply);
     render(<App />);
     const user = userEvent.setup();
@@ -71,7 +103,7 @@ describe('chat experience', () => {
     await user.type(screen.getByRole('textbox'), 'Old request');
     await user.click(screen.getByLabelText('Send message'));
     await user.click(screen.getByRole('button', { name: /New chat/ }));
-    resolve(new Response('{"reply":"Stale reply"}'));
+    resolve(streamResponse('Stale reply'));
     await waitFor(() => expect(screen.getByText('What’s on your mind?')).toBeInTheDocument());
     expect(screen.queryByText('Stale reply')).not.toBeInTheDocument();
     expect(fetch).not.toHaveBeenCalledWith(
@@ -81,7 +113,7 @@ describe('chat experience', () => {
   });
 
   it('reuses the session for follow-ups and creates another after New chat', async () => {
-    const fetch = mockApi(async () => Response.json({ reply: 'Answer' }));
+    const fetch = mockApi(async () => streamResponse('Answer'));
     render(<App />);
     const user = userEvent.setup();
     for (const message of ['My name is Siva', 'What is my name?']) {
@@ -91,7 +123,7 @@ describe('chat experience', () => {
     }
     expect(fetch.mock.calls.filter(([path]) => path === '/api/chat/sessions')).toHaveLength(1);
     const turns = fetch.mock.calls
-      .filter(([path]) => path === '/api/chat')
+      .filter(([path]) => path === '/api/chat/stream')
       .map(([, init]) => JSON.parse(init.body as string));
     expect(turns.map((turn) => turn.sessionId)).toEqual([sessionId, sessionId]);
     expect(turns[0].requestId).not.toBe(turns[1].requestId);

@@ -148,12 +148,12 @@ export default function App() {
         />
       )}
       <aside className={`sidebar ${menuOpen ? 'is-open' : ''}`} aria-label="Navigation">
-        <a className="brand" href="./" aria-label="Spring AI home">
+        <a className="brand" href="./" aria-label="SHIVA_SMART_GPT home">
           <span className="brand-icon">
             <Sprout size={25} />
           </span>
           <span>
-            spring<span className="brand-ai">ai</span>
+            SHIVA_SMART_GPT
             <small>A SPACE FOR YOUR IDEAS</small>
           </span>
         </a>
@@ -216,7 +216,7 @@ export default function App() {
             </span>
           </div>
           <span className="model-badge">
-            <span className="status-dot" /> Spring AI
+            <span className="status-dot" /> SHIVA_SMART_GPT
           </span>
         </header>
         <div
@@ -314,7 +314,7 @@ export default function App() {
             onSubmit={submit}
           >
             <label className="sr-only" htmlFor="message">
-              Message Spring AI
+              Message SHIVA_SMART_GPT
             </label>
             <textarea
               id="message"

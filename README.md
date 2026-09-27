@@ -3,6 +3,9 @@
 The React + Vite + Tailwind frontend lives in [`frontend/`](frontend/README.md).
 See its README for local setup, architecture, checks, and deployment requirements.
 
+For the current Docker frontend + backend + MySQL workflow, follow [implement.md](implement.md#phase-4--complete-local-verification-and-operating-guide).
+The phased Azure deployment checklist is in [plan.md](plan.md).
+
 Java 21, Spring Boot 4.1 and Spring AI 2.0. Configure
 AZURE_OPENAI_BASE_URL (your Azure OpenAI v1 URL), AZURE_OPENAI_API_KEY and
 AZURE_OPENAI_DEPLOYMENT, plus the MySQL settings described below, then run:
@@ -69,6 +72,36 @@ API lifecycle (all routes use the existing access-key and rate-limit policy):
    Deletion cannot cancel provider work already in progress, but a late response cannot recreate the chat.
 
 Both IDs must be supplied together. Omitting both preserves the stateless API.
+
+### Streaming replies
+
+The frontend uses `POST /api/chat/stream` with the same request body as `/api/chat`.
+The response is UTF-8 `application/x-ndjson`: one JSON event per line, flushed as it arrives.
+
+```json
+{"type":"delta","text":"Hello"}
+{"type":"delta","text":" there"}
+{"type":"done","reply":"Hello there"}
+```
+
+Only `done` confirms success. It is emitted after the complete turn is committed.
+A completed retry can return only `done`, containing the saved reply. Provider failures,
+timeouts, invalid replies, or detected client write failures do not save a partial turn.
+After streaming begins, errors use `{"type":"error","status":502}` (or another appropriate
+status) because the HTTP headers may already have been sent. Authorization and input
+validation still return normal HTTP errors before streaming starts.
+
+Streams have a 75-second total provider deadline and a 64,000-character reply ceiling;
+saved turns also obey the configured memory character limit. Keep the request lease longer
+than the stream deadline. Stop aborts the browser request and discards partial text. The server
+detects disconnection on a subsequent write; provider cancellation is best effort. A complete
+turn committed just before a disconnect remains available through the same request ID.
+The existing `/api/chat` JSON contract remains available.
+
+Disable response buffering and compression buffering for `/api/chat/stream` at the gateway,
+and allow at least 90 seconds for the request. The server sends `X-Accel-Buffering: no` for
+compatible proxies. Verify streaming through the actual deployment gateway.
+
 Only successful user/assistant pairs are persisted. Concurrent calls for one conversation
 return 409; unknown or deleted conversations return 410. Conversations no longer expire.
 Database leases coordinate overlapping calls across backend instances without holding

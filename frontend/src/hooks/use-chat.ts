@@ -4,7 +4,7 @@ import {
   MAX_MESSAGE_LENGTH,
   createSession,
   deleteSession,
-  requestReply,
+  streamReply,
   getConversation,
   listConversations,
   renameConversation,
@@ -27,6 +27,7 @@ interface ActiveRequest {
   controller: AbortController;
   prompt: string;
   requestId: string;
+  assistantId: string;
 }
 const CURRENT_CHAT_KEY = 'spring-ai-current-chat';
 
@@ -160,6 +161,7 @@ export function useChat() {
       controller: new AbortController(),
       prompt,
       requestId: retry && failure ? failure.requestId : crypto.randomUUID(),
+      assistantId: crypto.randomUUID(),
     };
     active.current = request;
     setPending(true);
@@ -180,19 +182,34 @@ export function useChat() {
         setSelectedId(created);
         remember(created);
       }
-      const reply = await requestReply(prompt, request.controller.signal, {
-        sessionId: sessionId.current,
-        requestId: request.requestId,
-      });
+      let partial = '';
+      const reply = await streamReply(
+        prompt,
+        request.controller.signal,
+        {
+          sessionId: sessionId.current,
+          requestId: request.requestId,
+        },
+        (text) => {
+          if (active.current !== request) return;
+          partial += text;
+          const content = partial;
+          setMessages((previous) => [
+            ...previous.filter((message) => message.id !== request.assistantId),
+            { id: request.assistantId, role: 'assistant', content },
+          ]);
+        },
+      );
       if (active.current === request) {
         setMessages((previous) => [
-          ...previous,
-          { id: crypto.randomUUID(), role: 'assistant', content: reply },
+          ...previous.filter((message) => message.id !== request.assistantId),
+          { id: request.assistantId, role: 'assistant', content: reply },
         ]);
         void refreshHistory();
       }
     } catch (error) {
       if (active.current === request && !request.controller.signal.aborted) {
+        setMessages((previous) => previous.filter((message) => message.id !== request.assistantId));
         setFailure({
           message: errorMessage(error),
           prompt,
@@ -212,11 +229,14 @@ export function useChat() {
   function stop() {
     const request = active.current;
     request?.controller.abort();
+    if (request)
+      setMessages((previous) => previous.filter((message) => message.id !== request.assistantId));
     active.current = null;
     setPending(false);
     if (request)
       setFailure({
-        message: 'Stopped waiting. The model may still finish; retry to retrieve the response.',
+        message:
+          'Response stopped. Partial text was discarded. Retry to retrieve a complete reply.',
         prompt: request.prompt,
         requestId: request.requestId,
       });

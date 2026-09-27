@@ -2,6 +2,12 @@
 
 React, TypeScript, Vite, and Tailwind CSS. Requires Node.js 22.12 or newer.
 
+For the complete Docker setup, follow [Phase 3 in implement.md](../implement.md#phase-3--frontend-in-docker).
+From the repository root, `powershell -NoProfile -File scripts/local.ps1 FrontendUp`
+builds and starts Nginx, the backend, and MySQL. The provider API key must be available
+in that terminal. Open `http://127.0.0.1:5173`; do not run Vite on that port simultaneously.
+Host Node.js is only needed for the development workflow below, not the Docker workflow.
+
 ## Run locally
 
 Start the Spring backend using the root README, then in a second terminal:
@@ -29,8 +35,9 @@ Azure credentials belong only in the Spring backend environment.
 - `src/styles.css`: theme tokens, layout, typography, Markdown, reduced motion.
 
 The first message creates a session with `POST /api/chat/sessions`. Messages use
-`POST /api/chat` with `{ "message": "...", "sessionId": "...", "requestId": "..." }`
-and receive `{ "reply": "..." }`. The server supplies recent conversation context;
+`POST /api/chat/stream` with `{ "message": "...", "sessionId": "...", "requestId": "..." }`
+and receive newline-delimited JSON text updates followed by a completion acknowledgement.
+The server supplies recent conversation context;
 the browser does not resend or control earlier model messages. Manual retries reuse
 the same request ID so a completed turn can be returned without another model call.
 
@@ -46,9 +53,11 @@ The backend saves full completed turns, but only the latest 10 turns within a
 not expire. If a conversation was deleted elsewhere, the UI offers a new chat.
 
 Enter sends; Shift+Enter inserts a newline. Composition input is respected.
-Replies arrive in full because the backend does not stream. Stop cancels browser
-waiting; it cannot guarantee cancellation of a model call already running on the
-server. Retries are manual to avoid silently repeating paid provider calls.
+Replies appear incrementally. Only the final `done` event confirms a complete saved reply.
+Stop, network interruption, or a stream error discards partial text and offers a manual retry
+with the same request ID. Stop cannot guarantee immediate cancellation of provider work;
+a fully completed reply may already have been saved and will be retrieved on retry.
+Retries are manual to avoid silently repeating paid provider calls.
 Markdown does not execute raw HTML; remote images are suppressed to avoid
 automatic third-party requests. Links open with opener isolation.
 
@@ -80,3 +89,6 @@ This is a personal workspace with one shared history. User authentication and ow
 remain future work; do not expose the shared history publicly without access protection.
 Keep identifiers private and avoid logging request bodies or session URLs. Configure gateway timeouts
 to allow the provider response and security headers appropriate to your hosting.
+Disable proxy response buffering for `/api/chat/stream` and permit requests lasting at least
+90 seconds. The backend sends `X-Accel-Buffering: no`; confirm incremental delivery through
+the actual gateway, since development proxy behavior does not verify production buffering.

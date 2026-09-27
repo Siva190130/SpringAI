@@ -166,6 +166,102 @@ export async function requestReply(
   return data.reply;
 }
 
+/** A stream is successful only after a done event confirms the durable reply. */
+export async function streamReply(
+  message: string,
+  signal: AbortSignal,
+  session: SessionRequest,
+  onDelta: (text: string) => void,
+): Promise<string> {
+  const timeout = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
+  const combined = AbortSignal.any([signal, timeout]);
+  let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+  try {
+    const response = await fetch('/api/chat/stream', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/x-ndjson' },
+      body: JSON.stringify({ message, ...session }),
+      signal: combined,
+    });
+    if (!response.ok) throw streamError(response.status);
+    if (!response.body || !response.headers.get('Content-Type')?.includes('application/x-ndjson')) {
+      throw new ChatApiError('The server returned an invalid response stream.');
+    }
+    reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let received = 0;
+    while (true) {
+      combined.throwIfAborted();
+      const { value, done } = await reader.read();
+      combined.throwIfAborted();
+      buffer += decoder.decode(value, { stream: !done });
+      let end: number;
+      while ((end = buffer.indexOf('\n')) >= 0) {
+        const line = buffer.slice(0, end);
+        buffer = buffer.slice(end + 1);
+        if (!line.trim()) continue;
+        const event: unknown = JSON.parse(line);
+        if (!event || typeof event !== 'object' || !('type' in event)) {
+          throw new ChatApiError('The server returned an invalid response stream.');
+        }
+        if (event.type === 'error') {
+          throw streamError(
+            'status' in event && typeof event.status === 'number' ? event.status : 502,
+          );
+        }
+        if (
+          event.type === 'done' &&
+          'reply' in event &&
+          typeof event.reply === 'string' &&
+          event.reply.trim() &&
+          event.reply.length <= 64000
+        ) {
+          return event.reply;
+        }
+        if (event.type !== 'delta' || !('text' in event) || typeof event.text !== 'string') {
+          throw new ChatApiError('The server returned an invalid response stream.');
+        }
+        received += event.text.length;
+        if (received > 64000) throw new ChatApiError('The response was too large. Please retry.');
+        onDelta(event.text);
+      }
+      if (buffer.length > 400000)
+        throw new ChatApiError('The response was too large. Please retry.');
+      if (done)
+        throw new ChatApiError(
+          'The response was interrupted. Please retry to retrieve a complete reply.',
+        );
+    }
+  } catch (error) {
+    if (signal.aborted) throw error;
+    if (timeout.aborted) throw new ChatApiError('The response took too long. Please retry.');
+    if (error instanceof ChatApiError) throw error;
+    throw new ChatApiError(
+      'The response was interrupted. Please retry to retrieve a complete reply.',
+    );
+  } finally {
+    await reader?.cancel().catch(() => {});
+    reader?.releaseLock();
+  }
+}
+
+function streamError(status: number): ChatApiError {
+  const messages: Record<number, string> = {
+    400: 'Please send a message of up to 16,000 characters.',
+    401: 'Access could not be verified. Check the server access configuration.',
+    409: 'A response is still in progress. Please wait a moment and try again.',
+    410: 'This conversation was deleted. Start a new chat to continue.',
+    429: 'Too many requests. Please wait a moment before trying again.',
+    503: 'The model is temporarily busy or unavailable. Please try again shortly.',
+    504: 'The response took too long. Please retry.',
+  };
+  return new ChatApiError(
+    messages[status] || 'The response could not be completed. Please retry.',
+    status,
+  );
+}
+
 async function requestJson(path: string, init: RequestInit, signal: AbortSignal): Promise<unknown> {
   const timeout = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
   try {

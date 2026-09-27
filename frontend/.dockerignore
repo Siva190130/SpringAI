@@ -1,0 +1,20 @@
+# Only the files needed to build/test React and configure the runtime server.
+**
+!package.json
+!package-lock.json
+!index.html
+!tsconfig.json
+!vite.config.ts
+!eslint.config.js
+!src/
+!src/**
+!nginx/
+!nginx/**
+**/.env
+**/.env.*
+**/*.pem
+**/*.key
+**/*.p12
+**/*.pfx
+**/node_modules
+**/dist

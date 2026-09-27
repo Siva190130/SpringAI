@@ -1,0 +1,20 @@
+# Allow only the backend build inputs. Local secrets, frontend, Git metadata,
+# IDE files, generated artifacts, and documentation never enter the context.
+**
+!pom.xml
+!mvnw
+!.mvn/
+!.mvn/wrapper/
+!.mvn/wrapper/maven-wrapper.properties
+!src/
+!src/**
+
+# Also exclude accidental credentials and generated files within src/.
+**/.env
+**/.env.*
+**/*.pem
+**/*.key
+**/*.p12
+**/*.pfx
+**/target
+**/node_modules

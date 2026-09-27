@@ -27,12 +27,12 @@ export function Message({ message }: { message: ChatMessage }) {
       </article>
     );
   return (
-    <article className="assistant-message" aria-label="Spring AI response">
+    <article className="assistant-message" aria-label="SHIVA_SMART_GPT response">
       <div className="message-heading">
         <span className="small-brand">
           <Sprout size={16} />
         </span>{' '}
-        Spring AI
+        SHIVA_SMART_GPT
       </div>
       <div className="markdown">
         <Markdown
